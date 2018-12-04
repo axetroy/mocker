@@ -1,0 +1,1 @@
+# mock request for golang test
