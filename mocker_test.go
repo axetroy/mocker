@@ -1,7 +1,6 @@
 package mocker_test
 
 import (
-	"encoding/json"
 	"github.com/axetroy/mocker"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -9,83 +8,106 @@ import (
 	"testing"
 )
 
-func TestMocker_Get(t *testing.T) {
+func TestAllMethod(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	type Input struct {
-		Foo string
+	methods := []string{
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+		http.MethodConnect,
+		http.MethodOptions,
+		http.MethodTrace,
 	}
 
-	router.GET("/", func(context *gin.Context) {
-		context.String(http.StatusOK, "hello")
-	})
-
-	router.GET("/with_header", func(context *gin.Context) {
-		context.String(http.StatusOK, context.GetHeader("foo"))
-	})
-
-	router.GET("/with_body", func(context *gin.Context) {
-
-		var input = Input{}
-
-		if err := context.BindJSON(&input); err != nil {
-			context.String(http.StatusOK, err.Error())
-		}
-
-		context.String(http.StatusOK, input.Foo)
-	})
-
-	router.GET("/get", func(context *gin.Context) {
-		context.String(http.StatusOK, context.Request.Method)
-	})
-
-	router.POST("/method", func(context *gin.Context) {
-		context.String(http.StatusOK, context.Request.Method)
-	})
-
-	router.PUT("/put", func(context *gin.Context) {
-		context.String(http.StatusOK, context.Request.Method)
-	})
-
-	router.DELETE("/delete", func(context *gin.Context) {
-		context.String(http.StatusOK, context.Request.Method)
-	})
-
-	router.PATCH("/patch", func(context *gin.Context) {
-		context.String(http.StatusOK, context.Request.Method)
-	})
+	for _, method := range methods {
+		router.Handle(method, "/foo", func(context *gin.Context) {
+			context.Header("foo", "bar")
+			context.String(http.StatusOK, "bar")
+		})
+	}
 
 	m := mocker.New(router)
 
-	// request with nothing
-	r1 := m.Get("/", []byte(""), nil)
+	for _, method := range methods {
+		res := m.Request(method, "/foo", nil, nil)
+		assert.Equal(t, "bar", res.Body.String())
+		assert.Equal(t, "bar", res.Header().Get("foo"))
+	}
+}
 
-	assert.Equal(t, http.StatusOK, r1.Code)
-	assert.Equal(t, "hello", r1.Body.String())
-
-	// request with header
-	r2 := m.Get("/with_header", []byte(""), &mocker.Header{
-		"foo": "bar",
-	})
-
-	assert.Equal(t, "bar", r2.Body.String())
-
-	// request with body
-	input := Input{
-		Foo: "bar",
+func TestBasic(t *testing.T) {
+	type route struct {
+		Method   string
+		Path     string
+		Body     []byte
+		Header   *mocker.Header
+		Response string
 	}
 
-	if b, err := json.Marshal(&input); err != nil {
-		assert.Error(t, err, err.Error())
-	} else {
-		r3 := m.Get("/with_body", b, nil)
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
 
-		assert.Equal(t, "bar", r3.Body.String())
+	routes := []route{
+		{
+			Method:   http.MethodGet,
+			Path:     "/foo",
+			Body:     nil,
+			Header:   nil,
+			Response: "bar",
+		},
+		{
+			Method: http.MethodPost,
+			Path:   "/foo",
+			Body:   nil,
+			Header: &mocker.Header{
+				"foo": "bar",
+			},
+			Response: "bar",
+		},
+		{
+			Method:   http.MethodPut,
+			Path:     "/foo",
+			Body:     []byte("foo"),
+			Response: "bar",
+		},
 	}
 
-	// request with another method
-	r4 := m.Post("/method", []byte(""), nil)
+	for _, r := range routes {
+		func(r route) {
+			router.Handle(r.Method, r.Path, func(context *gin.Context) {
+				context.Header("X-Request-Path", r.Path)
 
-	assert.Equal(t, http.MethodPost, r4.Body.String())
+				if r.Header != nil {
+					for key, val := range *r.Header {
+						assert.Equal(t, val, context.GetHeader(key))
+					}
+				}
+
+				if len(r.Body) > 0 {
+					data, _ := context.GetRawData()
+					assert.Equal(t, r.Body, data)
+				}
+
+				context.String(http.StatusOK, r.Response)
+			})
+		}(r)
+	}
+
+	m := mocker.New(router)
+
+	for _, r := range routes {
+		res := m.Request(r.Method, r.Path, r.Body, r.Header)
+
+		// response body validate
+		assert.Equal(t, r.Response, res.Body.String())
+
+		// response header validate
+		assert.Equal(t, r.Path, res.Header().Get("X-Request-Path"))
+	}
+
 }
