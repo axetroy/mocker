@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/github/license/axetroy/mocker.svg)
 ![Repo Size](https://img.shields.io/github/repo-size/axetroy/mocker.svg)
 
-## quickly test your HTTP requests
+quickly test your HTTP requests
 
 ## Usage
 
@@ -31,14 +31,8 @@ func main()  {
 	
 	res := mock.Get("/", nil, nil)
 	
-	fmt.Println(res)
+	fmt.Println(res.Body.String()) // hello world!
 }
-```
-
-## How to test?
-
-```bash
-make test
 ```
 
 ## License

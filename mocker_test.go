@@ -38,6 +38,15 @@ func TestAllMethod(t *testing.T) {
 		assert.Equal(t, "bar", res.Body.String())
 		assert.Equal(t, "bar", res.Header().Get("foo"))
 	}
+
+	m.Head("/foo", nil, nil)
+	m.Options("/foo", nil, nil)
+	m.Get("/foo", nil, nil)
+	m.Put("/foo", nil, nil)
+	m.Post("/foo", nil, nil)
+	m.Delete("/foo", nil, nil)
+	m.Patch("/foo", nil, nil)
+	m.Trace("/foo", nil, nil)
 }
 
 func TestBasic(t *testing.T) {
