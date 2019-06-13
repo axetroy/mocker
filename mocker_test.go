@@ -1,8 +1,9 @@
-package mocker
+package mocker_test
 
 import (
+	"encoding/json"
+	"github.com/axetroy/mocker"
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/json"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"testing"
@@ -55,7 +56,7 @@ func TestMocker_Get(t *testing.T) {
 		context.String(http.StatusOK, context.Request.Method)
 	})
 
-	m := New(router)
+	m := mocker.New(router)
 
 	// request with nothing
 	r1 := m.Get("/", []byte(""), nil)
@@ -64,7 +65,7 @@ func TestMocker_Get(t *testing.T) {
 	assert.Equal(t, "hello", r1.Body.String())
 
 	// request with header
-	r2 := m.Get("/with_header", []byte(""), &Header{
+	r2 := m.Get("/with_header", []byte(""), &mocker.Header{
 		"foo": "bar",
 	})
 
