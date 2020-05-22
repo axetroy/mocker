@@ -2,42 +2,39 @@ package mocker_test
 
 import (
 	"github.com/axetroy/mocker"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
+type Route struct {
+	Method   string
+	Path     string
+	Body     []byte
+	Header   *mocker.Header
+	Response string
+}
+
+type Handler struct {
+	router []Route
+}
+
+func (h Handler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+	for _, route := range h.router {
+		if route.Path == req.URL.Path && route.Method == req.Method {
+			if route.Header != nil {
+				for key, value := range *route.Header {
+					res.Header().Set(key, value)
+				}
+			}
+
+			_, _ = res.Write(route.Body)
+		}
+	}
+}
+
 func TestAllMethod(t *testing.T) {
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
-
-	methods := []string{
-		http.MethodGet,
-		http.MethodHead,
-		http.MethodPost,
-		http.MethodPut,
-		http.MethodPatch,
-		http.MethodDelete,
-		http.MethodConnect,
-		http.MethodOptions,
-		http.MethodTrace,
-	}
-
-	for _, method := range methods {
-		router.Handle(method, "/foo", func(context *gin.Context) {
-			context.Header("foo", "bar")
-			context.String(http.StatusOK, "bar")
-		})
-	}
-
-	m := mocker.New(router)
-
-	for _, method := range methods {
-		res := m.Request(method, "/foo", nil, nil)
-		assert.Equal(t, "bar", res.Body.String())
-		assert.Equal(t, "bar", res.Header().Get("foo"))
-	}
+	m := mocker.New(Handler{})
 
 	m.Head("/foo", nil, nil)
 	m.Options("/foo", nil, nil)
@@ -49,74 +46,97 @@ func TestAllMethod(t *testing.T) {
 	m.Trace("/foo", nil, nil)
 }
 
-func TestBasic(t *testing.T) {
-	type route struct {
-		Method   string
-		Path     string
-		Body     []byte
-		Header   *mocker.Header
-		Response string
-	}
-
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
-
-	routes := []route{
+func TestMocker_Request(t *testing.T) {
+	routes := []Route{
 		{
 			Method:   http.MethodGet,
 			Path:     "/foo",
-			Body:     nil,
+			Body:     []byte("bar"),
 			Header:   nil,
 			Response: "bar",
 		},
 		{
 			Method: http.MethodPost,
-			Path:   "/foo",
-			Body:   nil,
+			Path:   "/hello",
+			Body:   []byte("world"),
 			Header: &mocker.Header{
 				"foo": "bar",
 			},
-			Response: "bar",
+			Response: "world",
 		},
 		{
 			Method:   http.MethodPut,
-			Path:     "/foo",
-			Body:     []byte("foo"),
-			Response: "bar",
+			Path:     "/123",
+			Body:     []byte("123"),
+			Response: "123",
 		},
 	}
 
-	for _, r := range routes {
-		func(r route) {
-			router.Handle(r.Method, r.Path, func(context *gin.Context) {
-				context.Header("X-Request-Path", r.Path)
+	handler := Handler{router: routes}
 
-				if r.Header != nil {
-					for key, val := range *r.Header {
-						assert.Equal(t, val, context.GetHeader(key))
-					}
-				}
-
-				if len(r.Body) > 0 {
-					data, _ := context.GetRawData()
-					assert.Equal(t, r.Body, data)
-				}
-
-				context.String(http.StatusOK, r.Response)
-			})
-		}(r)
+	type fields struct {
+		router http.Handler
 	}
-
-	m := mocker.New(router)
-
-	for _, r := range routes {
-		res := m.Request(r.Method, r.Path, r.Body, r.Header)
-
-		// response body validate
-		assert.Equal(t, r.Response, res.Body.String())
-
-		// response header validate
-		assert.Equal(t, r.Path, res.Header().Get("X-Request-Path"))
+	type args struct {
+		method string
+		path   string
+		body   []byte
+		header *mocker.Header
 	}
-
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   []byte
+	}{
+		{
+			name: "/foo",
+			fields: fields{
+				router: handler,
+			},
+			args: args{
+				method: http.MethodGet,
+				path:   "/foo",
+				body:   []byte("bar"),
+				header: nil,
+			},
+			want: []byte("bar"),
+		},
+		{
+			name: "/hello",
+			fields: fields{
+				router: handler,
+			},
+			args: args{
+				method: http.MethodPost,
+				path:   "/hello",
+				body:   []byte("world"),
+				header: nil,
+			},
+			want: []byte("world"),
+		},
+		{
+			name: "/123",
+			fields: fields{
+				router: handler,
+			},
+			args: args{
+				method: http.MethodPut,
+				path:   "/123",
+				body:   []byte("123"),
+				header: nil,
+			},
+			want: []byte("123"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &mocker.Mocker{
+				Router: tt.fields.router,
+			}
+			if got := c.Request(tt.args.method, tt.args.path, tt.args.body, tt.args.header); !reflect.DeepEqual(got.Body.Bytes(), tt.want) {
+				t.Errorf("Request() = %v, want %v", got.Body.Bytes(), tt.want)
+			}
+		})
+	}
 }
